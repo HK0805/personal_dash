@@ -1,2 +1,2 @@
-# Personal_dash
-Personal Dashboard to organise and store important link 
+# personal_dash
+personal Dashboard to organise and store important link 
