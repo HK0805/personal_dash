@@ -83,11 +83,6 @@ body::before {
   font-weight: 600;
 }
 
-.hero-weather {
-  font-size: clamp(2rem, 4vw, 4rem);
-  filter: drop-shadow(0 6px 10px rgba(10, 0, 30, 0.35));
-}
-
 .hero-center {
   display: grid;
   gap: 10px;

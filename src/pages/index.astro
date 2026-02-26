@@ -14,8 +14,8 @@ import '../styles/global.css';
     x-data="{
       dark: false,
       init() {
-        const saved = localStorage.getItem('personal-dash-theme');
-        this.dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const hour = new Date().getHours();
+        this.dark = hour >= 19 || hour < 7;
         this.applyTheme();
       },
       toggleTheme() {
@@ -25,7 +25,6 @@ import '../styles/global.css';
       applyTheme() {
         document.body.classList.toggle('theme-dark', this.dark);
         document.body.classList.toggle('theme-light', !this.dark);
-        localStorage.setItem('personal-dash-theme', this.dark ? 'dark' : 'light');
       }
     }"
     class="theme-light"
@@ -52,7 +51,6 @@ import '../styles/global.css';
           <p>Your Bookmark Hub</p>
         </div>
         <div class="hero-center">
-          <div class="hero-weather" aria-hidden="true">☀️☁️</div>
           <button
             class="theme-toggle"
             :class="dark ? 'is-dark' : 'is-light'"
