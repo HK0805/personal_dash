@@ -1,0 +1,5 @@
+node_modules/
+.astro/
+dist/
+backend/.env
+backend/data/*.db

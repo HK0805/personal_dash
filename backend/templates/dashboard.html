@@ -1,0 +1,88 @@
+{{define "dashboard.html"}}
+<section class="panel">
+  <h2>Add Link</h2>
+  <form
+    class="row-form"
+    hx-post="/backend/actions/links/create"
+    hx-target="#dashboard"
+    hx-swap="innerHTML"
+  >
+    <input name="name" placeholder="Link name" required />
+    <input name="url" type="url" placeholder="https://example.com" required />
+    <select name="category_id" required>
+      <option value="">Choose category</option>
+      {{range .Categories}}
+      <option value="{{.ID}}">{{.Name}}</option>
+      {{end}}
+    </select>
+    <button type="submit" class="btn">Add Link</button>
+  </form>
+</section>
+
+<div class="categories-grid">
+  {{if not .Categories}}
+  <div class="empty-state">
+    <p>No categories yet. Create one to get started.</p>
+  </div>
+  {{end}}
+  {{range .Categories}}
+  <section class="category-card">
+    <header class="category-header">
+      <h2>{{.Name}}</h2>
+      <form
+        hx-post="/backend/actions/categories/{{.ID}}/delete"
+        hx-target="#dashboard"
+        hx-swap="innerHTML"
+      >
+        <button type="submit" class="btn btn-ghost">Delete</button>
+      </form>
+    </header>
+
+    <ul class="links-list">
+      {{if not .Links}}
+      <li class="muted">No links in this category.</li>
+      {{end}}
+      {{range .Links}}
+      {{$link := .}}
+      <li x-data="{ editing: false }" class="link-row">
+        <div x-show="!editing" class="link-read">
+          <a href="{{.URL}}" target="_blank" rel="noreferrer" class="link-name">{{.Name}}</a>
+          <div class="link-actions">
+            <button @click="editing = true" class="btn btn-ghost" type="button">Edit</button>
+            <form
+              hx-post="/backend/actions/links/{{.ID}}/delete"
+              hx-target="#dashboard"
+              hx-swap="innerHTML"
+            >
+              <button class="btn btn-ghost" type="submit">Delete</button>
+            </form>
+          </div>
+        </div>
+
+        <form
+          x-show="editing"
+          x-cloak
+          class="link-edit"
+          hx-post="/backend/actions/links/{{.ID}}/update"
+          hx-target="#dashboard"
+          hx-swap="innerHTML"
+        >
+          <input name="name" value="{{.Name}}" required />
+          <input name="url" type="url" value="{{.URL}}" required />
+          <select name="category_id" required>
+            {{range $.Categories}}
+            <option value="{{.ID}}" {{if eq .ID $link.CategoryID}}selected{{end}}>{{.Name}}</option>
+            {{end}}
+          </select>
+          <div class="link-actions">
+            <button class="btn" type="submit">Save</button>
+            <button class="btn btn-ghost" @click="editing = false" type="button">Cancel</button>
+          </div>
+        </form>
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+</div>
+{{end}}
