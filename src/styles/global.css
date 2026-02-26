@@ -183,30 +183,33 @@ body::before {
   top: 2px;
   border-radius: 999px;
   background: #ffe600;
-  border: 3px solid rgba(255, 232, 79, 0.85);
-  box-shadow: 0 8px 16px rgba(255, 226, 78, 0.5);
+  border: 2px solid rgba(255, 232, 79, 0.9);
+  box-shadow: 0 6px 12px rgba(255, 226, 78, 0.45);
   transform: translateX(0);
   transition: transform 320ms ease, background 320ms ease, box-shadow 320ms ease, border-color 320ms ease;
 }
 
 .theme-toggle.is-dark .toggle-thumb {
   transform: translateX(58px);
-  background: #d8dbea;
-  border-color: rgba(215, 220, 241, 0.9);
-  box-shadow: 0 8px 16px rgba(20, 28, 65, 0.5);
+  background: radial-gradient(circle at 34% 32%, #eef0fb 0%, #d8ddef 62%, #c7cde3 100%);
+  border-color: rgba(229, 234, 247, 0.92);
+  box-shadow:
+    inset -2px -2px 0 rgba(178, 186, 216, 0.7),
+    0 6px 12px rgba(11, 17, 44, 0.6);
 }
 
 .thumb-crater {
   position: absolute;
   border-radius: 999px;
-  background: rgba(148, 158, 198, 0.65);
+  background: rgba(157, 166, 201, 0.7);
+  border: 1px solid rgba(147, 157, 193, 0.6);
   opacity: 0;
   transition: opacity 250ms ease;
 }
 
-.crater-1 { width: 6px; height: 6px; left: 6px; top: 10px; }
-.crater-2 { width: 8px; height: 8px; right: 5px; top: 6px; }
-.crater-3 { width: 7px; height: 7px; right: 7px; bottom: 4px; }
+.crater-1 { width: 5px; height: 5px; left: 6px; top: 11px; }
+.crater-2 { width: 7px; height: 7px; right: 4px; top: 6px; }
+.crater-3 { width: 6px; height: 6px; right: 8px; bottom: 5px; }
 
 .theme-toggle.is-dark .thumb-crater {
   opacity: 1;
