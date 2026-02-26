@@ -10,7 +10,26 @@ import '../styles/global.css';
     <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   </head>
-  <body>
+  <body
+    x-data="{
+      dark: false,
+      init() {
+        const saved = localStorage.getItem('personal-dash-theme');
+        this.dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+        this.applyTheme();
+      },
+      toggleTheme() {
+        this.dark = !this.dark;
+        this.applyTheme();
+      },
+      applyTheme() {
+        document.body.classList.toggle('theme-dark', this.dark);
+        document.body.classList.toggle('theme-light', !this.dark);
+        localStorage.setItem('personal-dash-theme', this.dark ? 'dark' : 'light');
+      }
+    }"
+    class="theme-light"
+  >
     <main class="page-wrap">
       <header
         class="hero"
@@ -32,7 +51,30 @@ import '../styles/global.css';
           <h1>Welcome Back!</h1>
           <p>Your Bookmark Hub</p>
         </div>
-        <div class="hero-weather" aria-hidden="true">☀️☁️</div>
+        <div class="hero-center">
+          <div class="hero-weather" aria-hidden="true">☀️☁️</div>
+          <button
+            class="theme-toggle"
+            :class="dark ? 'is-dark' : 'is-light'"
+            type="button"
+            @click="toggleTheme()"
+            :aria-label="dark ? 'Switch to light mode' : 'Switch to dark mode'"
+          >
+            <span class="toggle-track"></span>
+            <span class="toggle-rings"></span>
+            <span class="toggle-stars" aria-hidden="true">
+              <i></i><i></i><i></i><i></i><i></i><i></i>
+            </span>
+            <span class="toggle-clouds" aria-hidden="true">
+              <i></i><i></i>
+            </span>
+            <span class="toggle-thumb">
+              <span class="thumb-crater crater-1"></span>
+              <span class="thumb-crater crater-2"></span>
+              <span class="thumb-crater crater-3"></span>
+            </span>
+          </button>
+        </div>
         <div class="hero-time">
           <strong x-text="time">10:45 AM</strong>
           <span x-text="date">Tuesday, April 23</span>
