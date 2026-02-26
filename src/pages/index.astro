@@ -11,31 +11,36 @@ import '../styles/global.css';
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   </head>
   <body>
-    <main class="container" x-data>
-      <header class="top-bar">
-        <h1>Personal Dashboard</h1>
+    <main class="page-wrap">
+      <header
+        class="hero"
+        x-data="{
+          time: '',
+          date: '',
+          init() {
+            const update = () => {
+              const now = new Date();
+              this.time = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+              this.date = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+            };
+            update();
+            setInterval(update, 30000);
+          }
+        }"
+      >
+        <div>
+          <h1>Welcome Back!</h1>
+          <p>Your Bookmark Hub</p>
+        </div>
+        <div class="hero-weather" aria-hidden="true">☀️☁️</div>
+        <div class="hero-time">
+          <strong x-text="time">10:45 AM</strong>
+          <span x-text="date">Tuesday, April 23</span>
+        </div>
       </header>
 
-      <section class="panel">
-        <h2>Create Category</h2>
-        <form
-          class="row-form"
-          hx-post="/backend/actions/categories/create"
-          hx-target="#dashboard"
-          hx-swap="innerHTML"
-        >
-          <input name="name" placeholder="Category name" required />
-          <button class="btn" type="submit">Create</button>
-        </form>
-      </section>
-
-      <section
-        id="dashboard"
-        hx-get="/backend/partials/dashboard"
-        hx-trigger="load"
-        hx-swap="innerHTML"
-      >
-        <div class="empty-state">Loading your links...</div>
+      <section id="dashboard" hx-get="/backend/partials/dashboard" hx-trigger="load" hx-swap="innerHTML">
+        <div class="loading">Loading dashboard...</div>
       </section>
     </main>
   </body>

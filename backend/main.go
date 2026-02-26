@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +17,8 @@ import (
 )
 
 const requestTimeout = 8 * time.Second
+
+var defaultCategories = []string{"Work", "Learning", "Entertainment", "Favorites", "Quick Links"}
 
 type server struct {
 	db        *sql.DB
@@ -31,14 +32,24 @@ type dashboardCategory struct {
 }
 
 type dashboardLink struct {
-	ID         string
-	CategoryID string
-	Name       string
-	URL        string
+	ID           string
+	CategoryID   string
+	CategoryName string
+	Name         string
+	URL          string
+}
+
+type dashboardStats struct {
+	TotalLinks      int
+	Favorites       int
+	RecentAdded     int
+	TotalCategories int
 }
 
 type dashboardData struct {
 	Categories []dashboardCategory
+	QuickLinks []dashboardLink
+	Stats      dashboardStats
 }
 
 func main() {
@@ -56,7 +67,6 @@ func main() {
 		log.Fatalf("open sqlite: %v", err)
 	}
 	defer db.Close()
-
 	db.SetMaxOpenConns(1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
@@ -67,6 +77,9 @@ func main() {
 
 	if err := ensureSchema(db); err != nil {
 		log.Fatalf("ensure schema: %v", err)
+	}
+	if err := seedDefaultCategories(db); err != nil {
+		log.Fatalf("seed default categories: %v", err)
 	}
 
 	tpl, err := template.ParseFiles("templates/dashboard.html")
@@ -135,6 +148,33 @@ func ensureSchema(db *sql.DB) error {
 	return nil
 }
 
+func seedDefaultCategories(db *sql.DB) error {
+	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	defer cancel()
+
+	var count int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(1) FROM categories`).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for _, name := range defaultCategories {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO categories(name) VALUES(?)`, name); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
 func (s *server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
@@ -159,6 +199,7 @@ func (s *server) handleCreateCategory(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
 	}
+
 	name := strings.TrimSpace(r.FormValue("name"))
 	if name == "" {
 		http.Error(w, "category name is required", http.StatusBadRequest)
@@ -177,6 +218,7 @@ func (s *server) handleCreateCategory(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to create category", http.StatusInternalServerError)
 		return
 	}
+
 	s.renderDashboard(w)
 }
 
@@ -244,6 +286,10 @@ func (s *server) handleCreateLink(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "name, url, and category are required", http.StatusBadRequest)
 		return
 	}
+	if !isLikelyURL(url) {
+		http.Error(w, "invalid url", http.StatusBadRequest)
+		return
+	}
 
 	categoryID, err := strconv.ParseInt(categoryIDText, 10, 64)
 	if err != nil {
@@ -300,6 +346,7 @@ func (s *server) handleDeleteLink(w http.ResponseWriter, r *http.Request, id int
 		http.Error(w, "failed to delete link", http.StatusInternalServerError)
 		return
 	}
+
 	s.renderDashboard(w)
 }
 
@@ -315,6 +362,10 @@ func (s *server) handleUpdateLink(w http.ResponseWriter, r *http.Request, id int
 
 	if name == "" || url == "" || categoryIDText == "" {
 		http.Error(w, "name, url, and category are required", http.StatusBadRequest)
+		return
+	}
+	if !isLikelyURL(url) {
+		http.Error(w, "invalid url", http.StatusBadRequest)
 		return
 	}
 
@@ -353,13 +404,13 @@ func (s *server) getDashboardData(parent context.Context) (dashboardData, error)
 	ctx, cancel := context.WithTimeout(parent, requestTimeout)
 	defer cancel()
 
-	categoryRows, err := s.db.QueryContext(ctx, `SELECT id, name FROM categories`)
+	categoryRows, err := s.db.QueryContext(ctx, `SELECT id, name FROM categories ORDER BY id ASC`)
 	if err != nil {
 		return dashboardData{}, err
 	}
 	defer categoryRows.Close()
 
-	categories := make([]dashboardCategory, 0)
+	categories := make([]dashboardCategory, 0, 8)
 	categoryMap := make(map[int64]*dashboardCategory)
 	for categoryRows.Next() {
 		var id int64
@@ -375,11 +426,14 @@ func (s *server) getDashboardData(parent context.Context) (dashboardData, error)
 		return dashboardData{}, err
 	}
 
-	linkRows, err := s.db.QueryContext(ctx, `SELECT id, name, url, category_id FROM links`)
+	linkRows, err := s.db.QueryContext(ctx, `SELECT id, name, url, category_id FROM links ORDER BY id DESC`)
 	if err != nil {
 		return dashboardData{}, err
 	}
 	defer linkRows.Close()
+
+	allLinks := make([]dashboardLink, 0, 32)
+	favoritesCount := 0
 
 	for linkRows.Next() {
 		var id int64
@@ -389,29 +443,54 @@ func (s *server) getDashboardData(parent context.Context) (dashboardData, error)
 		if err := linkRows.Scan(&id, &name, &url, &categoryID); err != nil {
 			return dashboardData{}, err
 		}
-		if parentCategory, ok := categoryMap[categoryID]; ok {
-			parentCategory.Links = append(parentCategory.Links, dashboardLink{
-				ID:         strconv.FormatInt(id, 10),
-				CategoryID: strconv.FormatInt(categoryID, 10),
-				Name:       name,
-				URL:        url,
-			})
+		parentCategory, ok := categoryMap[categoryID]
+		if !ok {
+			continue
+		}
+
+		row := dashboardLink{
+			ID:           strconv.FormatInt(id, 10),
+			CategoryID:   strconv.FormatInt(categoryID, 10),
+			CategoryName: parentCategory.Name,
+			Name:         name,
+			URL:          url,
+		}
+
+		parentCategory.Links = append(parentCategory.Links, row)
+		allLinks = append(allLinks, row)
+		if strings.EqualFold(parentCategory.Name, "Favorites") {
+			favoritesCount++
 		}
 	}
 	if err := linkRows.Err(); err != nil {
 		return dashboardData{}, err
 	}
 
-	sort.Slice(categories, func(i, j int) bool {
-		return strings.ToLower(categories[i].Name) < strings.ToLower(categories[j].Name)
-	})
-	for i := range categories {
-		sort.Slice(categories[i].Links, func(a, b int) bool {
-			return strings.ToLower(categories[i].Links[a].Name) < strings.ToLower(categories[i].Links[b].Name)
-		})
+	recentAdded := len(allLinks)
+	if recentAdded > 3 {
+		recentAdded = 3
 	}
 
-	return dashboardData{Categories: categories}, nil
+	quickLinks := allLinks
+	if len(quickLinks) > 5 {
+		quickLinks = quickLinks[:5]
+	}
+
+	return dashboardData{
+		Categories: categories,
+		QuickLinks: quickLinks,
+		Stats: dashboardStats{
+			TotalLinks:      len(allLinks),
+			Favorites:       favoritesCount,
+			RecentAdded:     recentAdded,
+			TotalCategories: len(categories),
+		},
+	}, nil
+}
+
+func isLikelyURL(url string) bool {
+	url = strings.ToLower(strings.TrimSpace(url))
+	return strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")
 }
 
 func loggingMiddleware(next http.Handler) http.Handler {

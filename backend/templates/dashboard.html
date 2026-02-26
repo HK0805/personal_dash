@@ -1,88 +1,141 @@
 {{define "dashboard.html"}}
-<section class="panel">
-  <h2>Add Link</h2>
-  <form
-    class="row-form"
-    hx-post="/backend/actions/links/create"
-    hx-target="#dashboard"
-    hx-swap="innerHTML"
-  >
-    <input name="name" placeholder="Link name" required />
-    <input name="url" type="url" placeholder="https://example.com" required />
-    <select name="category_id" required>
-      <option value="">Choose category</option>
-      {{range .Categories}}
-      <option value="{{.ID}}">{{.Name}}</option>
-      {{end}}
-    </select>
-    <button type="submit" class="btn">Add Link</button>
-  </form>
-</section>
+<section
+  class="dashboard-shell"
+  x-data="{
+    selected: 'All',
+    query: '',
+    matches(name, url, category) {
+      const q = this.query.trim().toLowerCase();
+      const text = (name + ' ' + url).toLowerCase();
+      const queryOk = q === '' || text.includes(q);
+      const categoryOk = this.selected === 'All' || this.selected === category;
+      return queryOk && categoryOk;
+    }
+  }"
+>
+  <section class="search-strip glass-panel">
+    <input
+      type="text"
+      placeholder="Search your links..."
+      x-model.debounce.150ms="query"
+    />
+  </section>
 
-<div class="categories-grid">
-  {{if not .Categories}}
-  <div class="empty-state">
-    <p>No categories yet. Create one to get started.</p>
-  </div>
-  {{end}}
-  {{range .Categories}}
-  <section class="category-card">
-    <header class="category-header">
-      <h2>{{.Name}}</h2>
-      <form
-        hx-post="/backend/actions/categories/{{.ID}}/delete"
-        hx-target="#dashboard"
-        hx-swap="innerHTML"
-      >
-        <button type="submit" class="btn btn-ghost">Delete</button>
+  <section class="top-grid">
+    <aside class="glass-panel quick-links-panel">
+      <div class="panel-head">
+        <h2>Quick Links</h2>
+      </div>
+      <ul class="quick-links-list">
+        {{if not .QuickLinks}}
+        <li class="muted">No links yet</li>
+        {{end}}
+        {{range .QuickLinks}}
+        <li>
+          <a href="{{.URL}}" target="_blank" rel="noreferrer">{{.Name}}</a>
+        </li>
+        {{end}}
+      </ul>
+    </aside>
+
+    <section class="glass-panel add-panel">
+      <div class="panel-head">
+        <h2>Add New Link</h2>
+      </div>
+
+      <form class="link-form" hx-post="/backend/actions/links/create" hx-target="#dashboard" hx-swap="innerHTML">
+        <input name="name" placeholder="Link name" required />
+        <input name="url" type="url" placeholder="https://example.com" required />
+        <select name="category_id" required>
+          <option value="">Choose category</option>
+          {{range .Categories}}
+          <option value="{{.ID}}">{{.Name}}</option>
+          {{end}}
+        </select>
+        <button type="submit" class="btn btn-primary">Add Link</button>
       </form>
-    </header>
 
-    <ul class="links-list">
-      {{if not .Links}}
-      <li class="muted">No links in this category.</li>
-      {{end}}
+      <form class="category-form" hx-post="/backend/actions/categories/create" hx-target="#dashboard" hx-swap="innerHTML">
+        <input name="name" placeholder="Create category" required />
+        <button type="submit" class="btn btn-ghost">Add Category</button>
+      </form>
+    </section>
+
+    <aside class="glass-panel stats-panel">
+      <div class="panel-head">
+        <h2>Bookmark Stats</h2>
+      </div>
+      <div class="stat-row"><span>Total Links</span><strong>{{.Stats.TotalLinks}}</strong></div>
+      <div class="stat-row"><span>Favorites</span><strong>{{.Stats.Favorites}}</strong></div>
+      <div class="stat-row"><span>Recent Added</span><strong>{{.Stats.RecentAdded}}</strong></div>
+      <div class="stat-row"><span>Categories</span><strong>{{.Stats.TotalCategories}}</strong></div>
+    </aside>
+  </section>
+
+  <section class="glass-panel bookmarks-panel">
+    <div class="bookmarks-head">
+      <h2>My Bookmarks</h2>
+      <div class="tabs">
+        <button :class="selected === 'All' ? 'active' : ''" @click="selected = 'All'" type="button">All</button>
+        {{range .Categories}}
+        <button :class="selected === {{printf "%q" .Name}} ? 'active' : ''" @click="selected = {{printf "%q" .Name}}" type="button">{{.Name}}</button>
+        {{end}}
+      </div>
+    </div>
+
+    <div class="cards-grid">
+      {{range .Categories}}
       {{range .Links}}
       {{$link := .}}
-      <li x-data="{ editing: false }" class="link-row">
-        <div x-show="!editing" class="link-read">
-          <a href="{{.URL}}" target="_blank" rel="noreferrer" class="link-name">{{.Name}}</a>
-          <div class="link-actions">
-            <button @click="editing = true" class="btn btn-ghost" type="button">Edit</button>
-            <form
-              hx-post="/backend/actions/links/{{.ID}}/delete"
-              hx-target="#dashboard"
-              hx-swap="innerHTML"
-            >
-              <button class="btn btn-ghost" type="submit">Delete</button>
-            </form>
+      <article class="bookmark-card" x-show="matches({{printf "%q" $link.Name}}, {{printf "%q" $link.URL}}, {{printf "%q" $link.CategoryName}})">
+        <div x-data="{ editing: false }">
+          <div class="card-read" x-show="!editing">
+            <div class="card-top">
+              <a class="card-name" href="{{.URL}}" target="_blank" rel="noreferrer">{{.Name}}</a>
+              <span class="card-category">{{.CategoryName}}</span>
+            </div>
+            <p class="card-url">{{.URL}}</p>
+            <div class="card-actions">
+              <button class="btn btn-soft" @click="editing = true" type="button">Edit</button>
+              <form hx-post="/backend/actions/links/{{.ID}}/delete" hx-target="#dashboard" hx-swap="innerHTML">
+                <button class="btn btn-danger" type="submit">Delete</button>
+              </form>
+            </div>
           </div>
-        </div>
 
-        <form
-          x-show="editing"
-          x-cloak
-          class="link-edit"
-          hx-post="/backend/actions/links/{{.ID}}/update"
-          hx-target="#dashboard"
-          hx-swap="innerHTML"
-        >
-          <input name="name" value="{{.Name}}" required />
-          <input name="url" type="url" value="{{.URL}}" required />
-          <select name="category_id" required>
-            {{range $.Categories}}
-            <option value="{{.ID}}" {{if eq .ID $link.CategoryID}}selected{{end}}>{{.Name}}</option>
-            {{end}}
-          </select>
-          <div class="link-actions">
-            <button class="btn" type="submit">Save</button>
-            <button class="btn btn-ghost" @click="editing = false" type="button">Cancel</button>
-          </div>
-        </form>
-      </li>
+          <form
+            class="card-edit"
+            x-show="editing"
+            x-cloak
+            hx-post="/backend/actions/links/{{.ID}}/update"
+            hx-target="#dashboard"
+            hx-swap="innerHTML"
+          >
+            <input name="name" value="{{.Name}}" required />
+            <input name="url" type="url" value="{{.URL}}" required />
+            <select name="category_id" required>
+              {{range $.Categories}}
+              <option value="{{.ID}}" {{if eq .ID $link.CategoryID}}selected{{end}}>{{.Name}}</option>
+              {{end}}
+            </select>
+            <div class="card-actions">
+              <button class="btn btn-primary" type="submit">Save</button>
+              <button class="btn btn-ghost" @click="editing = false" type="button">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </article>
       {{end}}
-    </ul>
+      {{end}}
+    </div>
+
+    <section class="category-delete-row">
+      {{range .Categories}}
+      <form hx-post="/backend/actions/categories/{{.ID}}/delete" hx-target="#dashboard" hx-swap="innerHTML">
+        <button type="submit" class="btn btn-ghost">Delete {{.Name}}</button>
+      </form>
+      {{end}}
+    </section>
   </section>
-  {{end}}
-</div>
+</section>
 {{end}}
