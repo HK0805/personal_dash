@@ -181,6 +181,27 @@ func ensureSchema(db *sql.DB) error {
 	if err := migrateCategoriesToPanels(ctx, tx, workPanelID); err != nil {
 		return err
 	}
+	hasLinks, err := tableExistsTx(ctx, tx, "links")
+	if err != nil {
+		return err
+	}
+	if !hasLinks {
+		if _, err := tx.ExecContext(ctx, `CREATE TABLE links (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			url TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			logo_url TEXT NOT NULL DEFAULT '',
+			custom_logo_url TEXT NOT NULL DEFAULT '',
+			category_id INTEGER NOT NULL,
+			position INTEGER NOT NULL DEFAULT 0,
+			created_at INTEGER NOT NULL DEFAULT 0,
+			updated_at INTEGER NOT NULL DEFAULT 0,
+			FOREIGN KEY(category_id) REFERENCES categories(id) ON DELETE CASCADE
+		);`); err != nil {
+			return err
+		}
+	}
 
 	if err := addColumnIfMissing(ctx, tx, "links", "description", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
@@ -230,6 +251,24 @@ func ensureSchema(db *sql.DB) error {
 }
 
 func migrateCategoriesToPanels(ctx context.Context, tx *sql.Tx, defaultPanelID int64) error {
+	hasCategories, err := tableExistsTx(ctx, tx, "categories")
+	if err != nil {
+		return err
+	}
+	if !hasCategories {
+		if _, err := tx.ExecContext(ctx, `CREATE TABLE categories (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			panel_id INTEGER NOT NULL,
+			name TEXT NOT NULL,
+			position INTEGER NOT NULL DEFAULT 0,
+			UNIQUE(panel_id, name),
+			FOREIGN KEY(panel_id) REFERENCES panels(id) ON DELETE CASCADE
+		);`); err != nil {
+			return err
+		}
+		return nil
+	}
+
 	hasPanelID, err := columnExistsTx(ctx, tx, "categories", "panel_id")
 	if err != nil {
 		return err
@@ -400,6 +439,18 @@ func columnExistsTx(ctx context.Context, tx *sql.Tx, table string, column string
 		}
 	}
 	return false, rows.Err()
+}
+
+func tableExistsTx(ctx context.Context, tx *sql.Tx, table string) (bool, error) {
+	var name string
+	err := tx.QueryRowContext(ctx, `SELECT name FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1`, table).Scan(&name)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return false, err
 }
 
 func findPanelIDTx(ctx context.Context, tx *sql.Tx, name string) (int64, error) {
