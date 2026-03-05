@@ -63,6 +63,7 @@ type dashboardData struct {
 	Stats       dashboardStats
 	SearchHint  string
 	FormPanelID string
+	PanelNotes  string
 }
 
 func main() {
@@ -165,6 +166,9 @@ func ensureSchema(db *sql.DB) error {
 		); err != nil {
 			return err
 		}
+	}
+	if err := addColumnIfMissing(ctx, tx, "panels", "notes", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
 	}
 
 	workPanelID, err := findPanelIDTx(ctx, tx, "Work")
@@ -382,7 +386,7 @@ func (s *server) handlePanelActions(w http.ResponseWriter, r *http.Request) {
 	}
 	path := strings.TrimPrefix(r.URL.Path, "/actions/panels/")
 	parts := strings.Split(strings.Trim(path, "/"), "/")
-	if len(parts) != 2 || parts[1] != "delete" {
+	if len(parts) < 2 {
 		http.NotFound(w, r)
 		return
 	}
@@ -391,7 +395,17 @@ func (s *server) handlePanelActions(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid panel id", http.StatusBadRequest)
 		return
 	}
+	switch parts[1] {
+	case "delete":
+		s.handleDeletePanel(w, r, panelID)
+	case "notes":
+		s.handleUpdatePanelNotes(w, r, panelID)
+	default:
+		http.NotFound(w, r)
+	}
+}
 
+func (s *server) handleDeletePanel(w http.ResponseWriter, r *http.Request, panelID int64) {
 	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
 	defer cancel()
 
@@ -449,6 +463,21 @@ func (s *server) handlePanelActions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.renderDashboard(w, 0)
+}
+
+func (s *server) handleUpdatePanelNotes(w http.ResponseWriter, r *http.Request, panelID int64) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	notes := strings.TrimSpace(r.FormValue("notes"))
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+	defer cancel()
+	if _, err := s.db.ExecContext(ctx, `UPDATE panels SET notes = ? WHERE id = ?`, notes, panelID); err != nil {
+		http.Error(w, "failed to save notes", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *server) handleCreateCategory(w http.ResponseWriter, r *http.Request) {
@@ -691,6 +720,10 @@ func (s *server) getDashboardData(parent context.Context, requestedPanelID int64
 	if !panelExists(panels, activePanelID) {
 		activePanelID = panels[0].ID
 	}
+	panelNotes := ""
+	if err := s.db.QueryRowContext(ctx, `SELECT notes FROM panels WHERE id = ?`, activePanelID).Scan(&panelNotes); err != nil {
+		return dashboardData{}, err
+	}
 
 	categories, categoryMap, err := s.loadCategoriesForPanel(ctx, activePanelID)
 	if err != nil {
@@ -771,6 +804,7 @@ func (s *server) getDashboardData(parent context.Context, requestedPanelID int64
 		},
 		SearchHint:  fmt.Sprintf("Search links in %s...", findPanelName(panels, activePanelID)),
 		FormPanelID: strconv.FormatInt(activePanelID, 10),
+		PanelNotes:  panelNotes,
 	}, nil
 }
 

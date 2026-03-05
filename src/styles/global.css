@@ -325,7 +325,8 @@ body::before {
 .quick-links-panel,
 .add-panel,
 .stats-panel,
-.bookmarks-panel {
+.bookmarks-panel,
+.notes-panel {
   padding: 14px;
 }
 
@@ -566,6 +567,23 @@ body.theme-dark .bookmark-card {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.notes-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.notes-panel textarea {
+  min-height: 120px;
+  width: 100%;
+  resize: vertical;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 12px;
+  padding: 10px;
+  font: inherit;
+  color: #ebf0ff;
+  background: rgba(10, 24, 86, 0.42);
 }
 
 .loading,
