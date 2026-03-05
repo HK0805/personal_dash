@@ -7,8 +7,63 @@ import '../styles/global.css';
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Personal Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js" defer></script>
     <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script is:inline>
+      window.setupLifePanelsDnd = (root, panelId) => {
+        if (!window.Sortable || !root) return;
+
+        const post = (url, data) => {
+          const body = new URLSearchParams(data);
+          fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body
+          }).catch(() => {});
+        };
+
+        const categoryContainer = root.querySelector('[data-categories-dnd]');
+        if (categoryContainer && !categoryContainer.dataset.sortableReady) {
+          categoryContainer.dataset.sortableReady = '1';
+          new window.Sortable(categoryContainer, {
+            animation: 160,
+            draggable: '.category-column',
+            handle: '.category-column-head',
+            onEnd: () => {
+              const ids = Array.from(categoryContainer.querySelectorAll('.category-column'))
+                .map((item) => item.dataset.categoryId)
+                .filter(Boolean)
+                .join(',');
+              post('/backend/actions/reorder/categories', { panel_id: panelId, ordered_ids: ids });
+            }
+          });
+        }
+
+        const syncAllLists = () => {
+          root.querySelectorAll('[data-links-dnd]').forEach((list) => {
+            const categoryId = list.dataset.categoryId;
+            const ids = Array.from(list.querySelectorAll('.dnd-link'))
+              .map((item) => item.dataset.linkId)
+              .filter(Boolean)
+              .join(',');
+            post('/backend/actions/reorder/links', { category_id: categoryId, ordered_ids: ids });
+          });
+        };
+
+        root.querySelectorAll('[data-links-dnd]').forEach((list) => {
+          if (list.dataset.sortableReady) return;
+          list.dataset.sortableReady = '1';
+          new window.Sortable(list, {
+            animation: 160,
+            group: 'panel-links',
+            draggable: '.dnd-link',
+            handle: '.card-top',
+            onEnd: () => syncAllLists()
+          });
+        });
+      };
+    </script>
   </head>
   <body
     x-data="{

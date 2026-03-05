@@ -12,6 +12,7 @@
       return queryOk && categoryOk;
     }
   }"
+  x-init="window.setupLifePanelsDnd && window.setupLifePanelsDnd($root, '{{.FormPanelID}}')"
 >
   <section class="panel-strip glass-panel">
     <div class="panel-tabs">
@@ -109,61 +110,68 @@
       </div>
     </div>
 
-    <div class="cards-grid">
+    <div class="category-columns" data-categories-dnd>
       {{range .Categories}}
-      {{range .Links}}
-      {{$link := .}}
-      <article class="bookmark-card" x-show="matches({{printf "%q" $link.Name}}, {{printf "%q" $link.URL}}, {{printf "%q" $link.Description}}, {{printf "%q" $link.CategoryName}})">
-        <div x-data="{ editing: false }">
-          <div class="card-read" x-show="!editing">
-            <div class="card-top">
-              <div class="card-main">
-                {{if .LogoURL}}
-                <img src="{{.LogoURL}}" alt="" class="card-logo" loading="lazy" />
+      <article class="category-column" data-category-id="{{.ID}}">
+        <header class="category-column-head">
+          <h3>{{.Name}}</h3>
+        </header>
+        <div class="cards-grid links-dnd" data-links-dnd data-category-id="{{.ID}}">
+          {{range .Links}}
+          {{$link := .}}
+          <article class="bookmark-card dnd-link" data-link-id="{{.ID}}" x-show="matches({{printf "%q" $link.Name}}, {{printf "%q" $link.URL}}, {{printf "%q" $link.Description}}, {{printf "%q" $link.CategoryName}})">
+            <div x-data="{ editing: false }">
+              <div class="card-read" x-show="!editing">
+                <div class="card-top">
+                  <div class="card-main">
+                    {{if .LogoURL}}
+                    <img src="{{.LogoURL}}" alt="" class="card-logo" loading="lazy" />
+                    {{end}}
+                    <a class="card-name" href="{{.URL}}" target="_blank" rel="noreferrer">{{.Name}}</a>
+                  </div>
+                  <span class="card-category">{{.CategoryName}}</span>
+                </div>
+                <p class="card-url">{{.URL}}</p>
+                {{if .Description}}
+                <p class="card-description">{{.Description}}</p>
                 {{end}}
-                <a class="card-name" href="{{.URL}}" target="_blank" rel="noreferrer">{{.Name}}</a>
+                <div class="card-actions">
+                  <button class="btn btn-soft" @click="editing = true" type="button">Edit</button>
+                  <form hx-post="/backend/actions/links/{{.ID}}/delete" hx-target="#dashboard" hx-swap="innerHTML">
+                    <input type="hidden" name="active_panel_id" value="{{$.FormPanelID}}" />
+                    <button class="btn btn-danger" type="submit">Delete</button>
+                  </form>
+                </div>
               </div>
-              <span class="card-category">{{.CategoryName}}</span>
-            </div>
-            <p class="card-url">{{.URL}}</p>
-            {{if .Description}}
-            <p class="card-description">{{.Description}}</p>
-            {{end}}
-            <div class="card-actions">
-              <button class="btn btn-soft" @click="editing = true" type="button">Edit</button>
-              <form hx-post="/backend/actions/links/{{.ID}}/delete" hx-target="#dashboard" hx-swap="innerHTML">
+
+              <form
+                class="card-edit"
+                x-show="editing"
+                x-cloak
+                hx-post="/backend/actions/links/{{.ID}}/update"
+                hx-target="#dashboard"
+                hx-swap="innerHTML"
+              >
                 <input type="hidden" name="active_panel_id" value="{{$.FormPanelID}}" />
-                <button class="btn btn-danger" type="submit">Delete</button>
+                <input name="name" value="{{.Name}}" required />
+                <input name="url" type="url" value="{{.URL}}" required />
+                <input name="description" value="{{.Description}}" placeholder="Description" />
+                <input name="custom_logo_url" value="{{.LogoURL}}" placeholder="Custom logo URL" />
+                <select name="category_id" required>
+                  {{range $.Categories}}
+                  <option value="{{.ID}}" {{if eq .ID $link.CategoryID}}selected{{end}}>{{.Name}}</option>
+                  {{end}}
+                </select>
+                <div class="card-actions">
+                  <button class="btn btn-primary" type="submit">Save</button>
+                  <button class="btn btn-ghost" @click="editing = false" type="button">Cancel</button>
+                </div>
               </form>
             </div>
-          </div>
-
-          <form
-            class="card-edit"
-            x-show="editing"
-            x-cloak
-            hx-post="/backend/actions/links/{{.ID}}/update"
-            hx-target="#dashboard"
-            hx-swap="innerHTML"
-          >
-            <input type="hidden" name="active_panel_id" value="{{$.FormPanelID}}" />
-            <input name="name" value="{{.Name}}" required />
-            <input name="url" type="url" value="{{.URL}}" required />
-            <input name="description" value="{{.Description}}" placeholder="Description" />
-            <input name="custom_logo_url" value="{{.LogoURL}}" placeholder="Custom logo URL" />
-            <select name="category_id" required>
-              {{range $.Categories}}
-              <option value="{{.ID}}" {{if eq .ID $link.CategoryID}}selected{{end}}>{{.Name}}</option>
-              {{end}}
-            </select>
-            <div class="card-actions">
-              <button class="btn btn-primary" type="submit">Save</button>
-              <button class="btn btn-ghost" @click="editing = false" type="button">Cancel</button>
-            </div>
-          </form>
+          </article>
+          {{end}}
         </div>
       </article>
-      {{end}}
       {{end}}
     </div>
 

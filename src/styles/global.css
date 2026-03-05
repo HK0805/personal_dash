@@ -458,11 +458,42 @@ body::before {
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 
+.category-columns {
+  margin-top: 12px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.category-column {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(9, 24, 84, 0.35);
+}
+
+.category-column-head {
+  cursor: grab;
+}
+
+.category-column-head h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.links-dnd {
+  min-height: 30px;
+}
+
 .bookmark-card {
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 14px;
   background: linear-gradient(180deg, rgba(30, 52, 141, 0.82), rgba(21, 40, 115, 0.82));
   padding: 11px;
+}
+
+.dnd-link .card-top {
+  cursor: grab;
 }
 
 body.theme-light .bookmark-card {

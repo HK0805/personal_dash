@@ -112,6 +112,8 @@ func main() {
 	mux.HandleFunc("/actions/categories/", s.handleCategoryActions)
 	mux.HandleFunc("/actions/links/create", s.handleCreateLink)
 	mux.HandleFunc("/actions/links/", s.handleLinkActions)
+	mux.HandleFunc("/actions/reorder/categories", s.handleReorderCategories)
+	mux.HandleFunc("/actions/reorder/links", s.handleReorderLinks)
 
 	addr := fmt.Sprintf(":%s", cfg.port)
 	log.Printf("api listening at http://localhost%s", addr)
@@ -689,6 +691,81 @@ func (s *server) handleUpdateLink(w http.ResponseWriter, r *http.Request, id int
 	s.renderDashboard(w, activePanelID)
 }
 
+func (s *server) handleReorderCategories(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	panelID := parseInt64OrZero(r.FormValue("panel_id"))
+	ordered := parseIDList(r.FormValue("ordered_ids"))
+	if panelID == 0 {
+		http.Error(w, "invalid panel id", http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+	defer cancel()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		http.Error(w, "failed to reorder categories", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+	for idx, id := range ordered {
+		if _, err := tx.ExecContext(ctx, `UPDATE categories SET position = ? WHERE id = ? AND panel_id = ?`, idx, id, panelID); err != nil {
+			http.Error(w, "failed to reorder categories", http.StatusInternalServerError)
+			return
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "failed to reorder categories", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *server) handleReorderLinks(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	categoryID := parseInt64OrZero(r.FormValue("category_id"))
+	ordered := parseIDList(r.FormValue("ordered_ids"))
+	if categoryID == 0 {
+		http.Error(w, "invalid category id", http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+	defer cancel()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		http.Error(w, "failed to reorder links", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+	now := time.Now().Unix()
+	for idx, id := range ordered {
+		if _, err := tx.ExecContext(ctx, `UPDATE links SET category_id = ?, position = ?, updated_at = ? WHERE id = ?`, categoryID, idx, now, id); err != nil {
+			http.Error(w, "failed to reorder links", http.StatusInternalServerError)
+			return
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "failed to reorder links", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *server) renderDashboard(w http.ResponseWriter, requestedPanelID int64) {
 	data, err := s.getDashboardData(context.Background(), requestedPanelID)
 	if err != nil {
@@ -904,6 +981,17 @@ func parseInt64OrZero(value string) int64 {
 		return 0
 	}
 	return parsed
+}
+
+func parseIDList(raw string) []int64 {
+	parts := strings.Split(raw, ",")
+	ids := make([]int64, 0, len(parts))
+	for _, p := range parts {
+		if id := parseInt64OrZero(p); id != 0 {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 func isLikelyURL(url string) bool {
