@@ -1,75 +1,159 @@
-# personal_dash
+# Life Panels Dashboard
 
-Personal link dashboard for your browser new-tab page.
+A local-first personal link manager designed for browser new-tab usage.
+It supports multiple life panels (Work, Personal, etc.), fast link organization, drag/drop workflows, and cross-tab syncing.
 
-## Stack
-- Astro (UI shell)
-- HTMX + Alpine.js (interactivity)
-- Go (`net/http`) API
-- SQLite (local database)
+## What This Project Solves
+Most bookmark tools are either too simple or too heavy. This project is a focused middle ground:
+- quick capture and edit of useful links
+- panel-based organization for different areas of life
+- instant interactions without a heavy frontend framework runtime
+- reliable local persistence via SQLite
 
-## Prerequisites
-- Node.js 18+ (`npm`)
+## Core Features
+- Multi-panel organization
+  - Default panels: `Work`, `Personal`
+  - Create and delete panels
+  - Each panel has isolated categories, links, and notes
+- Category and link management
+  - Create/delete categories
+  - Create/edit/delete links
+  - Link metadata: `title`, `url`, `description`, `logo`
+- Smart logo support
+  - Auto-derives favicon URL using Google favicon endpoint
+  - Optional custom logo URL override
+- Drag and drop
+  - Reorder categories within a panel
+  - Reorder links inside a category
+  - Move links across categories
+- Search and filtering
+  - Panel-scoped search by title, URL, and description
+- Notes / scratchpad
+  - Per-panel notes
+  - Debounced autosave
+  - Clear notes with confirmation
+- Keyboard shortcuts
+  - `1`–`9`: switch among first 9 panels
+  - `/`: focus search
+  - `n`: focus add-link input
+  - Shortcuts are disabled while typing in form fields
+- Cross-tab sync
+  - BroadcastChannel (primary)
+  - `storage` event fallback
+  - Syncs panel/category/link/notes mutations
+- Dynamic greeting + theme
+  - Time-based greeting updates every minute
+  - Day/night toggle with animation
+
+## Tech Stack and Tools
+- Frontend shell: **Astro**
+- Interactivity: **HTMX** + **Alpine.js**
+- Drag/drop: **SortableJS**
+- Backend: **Go** (`net/http`, server-rendered partials)
+- Database: **SQLite** (`modernc.org/sqlite` driver)
+- Build/runtime: **npm**, **Go toolchain**
+
+## Architecture (High Level)
+- Server-rendered UI with partial updates
+  - Astro serves page shell
+  - Go renders dashboard HTML partials
+  - HTMX posts actions and swaps `#dashboard` without full reload
+- Local persistence
+  - SQLite stores all app state
+  - Schema migration runs on startup and is backward-safe
+- Event-driven UX
+  - Alpine handles local UI state (filters, edit toggles, greeting, theme)
+  - SortableJS emits reorder events persisted through Go endpoints
+- Cross-tab consistency
+  - Mutation broadcasts trigger dashboard refresh in other tabs
+
+## Data Model (Current)
+- `panels`
+  - `id`, `name`, `position`, `notes`
+- `categories`
+  - `id`, `panel_id`, `name`, `position`
+- `links`
+  - `id`, `name`, `url`, `description`, `logo_url`, `custom_logo_url`, `category_id`, `position`, `created_at`, `updated_at`
+
+## Project Structure
+- `backend/main.go`: API handlers, schema migration, business logic
+- `backend/templates/dashboard.html`: server-rendered dashboard partial
+- `src/pages/index.astro`: app shell + global scripts
+- `src/styles/global.css`: styling and layout
+- `scripts/dev.sh`: starts backend + frontend together
+
+## Local Setup
+### Prerequisites
+- Node.js 18+
 - Go 1.22+
 
-## Features
-- Links grouped by category
-- Create/delete categories
-- Create/edit/delete links
-- Fast partial refreshes using HTMX
+### 1) Install dependencies
+```bash
+cd <project-root>
+npm install
+```
 
-## Project structure
-- `backend/`: Go API + SQLite integration + HTML partial templates
-- `src/pages/index.astro`: Astro new-tab page shell
-- `src/styles/global.css`: Minimal UI styles
+### 2) Configure backend env
+```bash
+cd backend
+cp .env.example .env
+```
 
-## 1) Configure backend env
-Copy `backend/.env.example` to `backend/.env`.
-
-Example `backend/.env`:
-
+Default `.env`:
 ```env
 SQLITE_PATH=./data/personal_dash.db
 PORT=8080
 ```
 
-## 2) Install frontend deps
+### 3) Run app (recommended)
 ```bash
-cd /Users/dhamodharans/personal_dash
-npm install
-```
-
-## 3) Run the full app (recommended)
-```bash
-cd /Users/dhamodharans/personal_dash
+cd <project-root>
 ./scripts/dev.sh
 ```
 
-This starts:
-- Backend API on `http://localhost:8080`
-- Astro frontend on `http://localhost:4321`
+- Frontend: `http://localhost:4321`
+- Backend: `http://localhost:8080`
 
-## 4) Run manually (optional)
+## Build and Test
 ```bash
-cd backend
-export $(grep -v '^#' .env | xargs)
-go mod tidy
-go run .
+cd backend && go test ./...
+cd .. && npm run build
 ```
 
-API will be available at `http://localhost:8080`.
+## API Server
+The backend is a Go `net/http` server.
 
-```bash
-cd /Users/dhamodharans/personal_dash
-npm install
-npm run dev
-```
+- Default base URL: `http://localhost:8080`
+- Health endpoint: `GET /health`
+- Dashboard partial endpoint: `GET /partials/dashboard?panel_id=<id>`
 
-Frontend is available at `http://localhost:4321` and proxies `/backend/*` requests to Go API.
+### Main action APIs (HTMX form endpoints)
+- Panels
+  - `POST /actions/panels/create`
+  - `POST /actions/panels/{panelId}/delete`
+  - `POST /actions/panels/{panelId}/notes`
+  - `POST /actions/panels/{panelId}/notes-clear`
+- Categories
+  - `POST /actions/categories/create`
+  - `POST /actions/categories/{categoryId}/delete`
+  - `POST /actions/reorder/categories`
+- Links
+  - `POST /actions/links/create`
+  - `POST /actions/links/{linkId}/update`
+  - `POST /actions/links/{linkId}/delete`
+  - `POST /actions/reorder/links`
 
-## Use as browser new tab
-Set your browser's new-tab URL to:
+## Manual QA Checklist
+- Create/switch/delete panels
+- Add/edit/delete categories and links in the active panel
+- Drag categories and links; reload and verify order persistence
+- Move a link to another category via drag/drop
+- Add notes, refresh, and clear notes
+- Open two tabs; verify updates sync between tabs
+- Verify keyboard shortcuts and that they do not trigger while typing
 
+## New Tab Usage
+Set browser new-tab URL to:
 `http://localhost:4321`
 
-(If your browser requires an extension for custom new-tab URLs, use one like "Custom New Tab URL".)
+If your browser blocks custom new-tab URLs, use a lightweight extension to point new tabs to localhost.
