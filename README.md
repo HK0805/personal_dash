@@ -89,13 +89,13 @@ Most bookmark tools are either too simple or too heavy. This project is a focuse
 
 ### 1) Install dependencies
 ```bash
-cd /Users/dhamodharans/personal_dash
+cd <project-root>
 npm install
 ```
 
 ### 2) Configure backend env
 ```bash
-cd /Users/dhamodharans/personal_dash/backend
+cd backend
 cp .env.example .env
 ```
 
@@ -107,7 +107,7 @@ PORT=8080
 
 ### 3) Run app (recommended)
 ```bash
-cd /Users/dhamodharans/personal_dash
+cd <project-root>
 ./scripts/dev.sh
 ```
 
@@ -116,9 +116,32 @@ cd /Users/dhamodharans/personal_dash
 
 ## Build and Test
 ```bash
-cd /Users/dhamodharans/personal_dash/backend && go test ./...
-cd /Users/dhamodharans/personal_dash && npm run build
+cd backend && go test ./...
+cd .. && npm run build
 ```
+
+## API Server
+The backend is a Go `net/http` server.
+
+- Default base URL: `http://localhost:8080`
+- Health endpoint: `GET /health`
+- Dashboard partial endpoint: `GET /partials/dashboard?panel_id=<id>`
+
+### Main action APIs (HTMX form endpoints)
+- Panels
+  - `POST /actions/panels/create`
+  - `POST /actions/panels/{panelId}/delete`
+  - `POST /actions/panels/{panelId}/notes`
+  - `POST /actions/panels/{panelId}/notes-clear`
+- Categories
+  - `POST /actions/categories/create`
+  - `POST /actions/categories/{categoryId}/delete`
+  - `POST /actions/reorder/categories`
+- Links
+  - `POST /actions/links/create`
+  - `POST /actions/links/{linkId}/update`
+  - `POST /actions/links/{linkId}/delete`
+  - `POST /actions/reorder/links`
 
 ## Manual QA Checklist
 - Create/switch/delete panels
@@ -128,13 +151,6 @@ cd /Users/dhamodharans/personal_dash && npm run build
 - Add notes, refresh, and clear notes
 - Open two tabs; verify updates sync between tabs
 - Verify keyboard shortcuts and that they do not trigger while typing
-
-## Interview / Recruiter Talking Points
-- Built a local-first productivity product with real migration safety (legacy schema to panel model)
-- Balanced backend-rendered performance with modern interaction patterns (HTMX + Alpine)
-- Implemented cross-tab eventual consistency using browser-native messaging primitives
-- Designed reliable drag/drop persistence across nested entities (categories and links)
-- Maintained a minimal stack with fast startup and no paid external services
 
 ## New Tab Usage
 Set browser new-tab URL to:
