@@ -58,6 +58,38 @@ import '../styles/global.css';
         } catch (_) {}
       });
 
+      const isTypingTarget = (target) => {
+        if (!target) return false;
+        const tag = target.tagName?.toLowerCase();
+        return tag === 'input' || tag === 'textarea' || target.isContentEditable;
+      };
+
+      window.addEventListener('keydown', (event) => {
+        if (isTypingTarget(event.target)) return;
+
+        if (event.key === '/') {
+          event.preventDefault();
+          document.querySelector('#panel-search')?.focus();
+          return;
+        }
+
+        if (event.key.toLowerCase() === 'n') {
+          event.preventDefault();
+          const addInput = document.querySelector('#add-link-name');
+          addInput?.focus();
+          return;
+        }
+
+        if (/^[1-9]$/.test(event.key)) {
+          const index = Number(event.key) - 1;
+          const tabs = Array.from(document.querySelectorAll('.panel-tab'));
+          if (tabs[index]) {
+            event.preventDefault();
+            tabs[index].click();
+          }
+        }
+      });
+
       document.addEventListener('htmx:afterRequest', (event) => {
         const path = event.detail?.requestConfig?.path || '';
         if (!path.includes('/backend/actions/')) return;

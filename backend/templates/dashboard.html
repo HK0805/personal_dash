@@ -43,7 +43,7 @@
   </section>
 
   <section class="search-strip glass-panel">
-    <input type="text" placeholder="{{.SearchHint}}" x-model.debounce.150ms="query" />
+    <input id="panel-search" type="text" placeholder="{{.SearchHint}}" x-model.debounce.150ms="query" />
   </section>
 
   <section class="top-grid">
@@ -70,7 +70,7 @@
 
       <form class="link-form" hx-post="/backend/actions/links/create" hx-target="#dashboard" hx-swap="innerHTML">
         <input type="hidden" name="active_panel_id" value="{{.FormPanelID}}" />
-        <input name="name" placeholder="Link name" required />
+        <input id="add-link-name" name="name" placeholder="Link name" required />
         <input name="url" type="url" placeholder="https://example.com" required />
         <input name="description" placeholder="Description (optional)" />
         <select name="category_id" required>
