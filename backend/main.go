@@ -200,6 +200,9 @@ func ensureSchema(db *sql.DB) error {
 	if err := addColumnIfMissing(ctx, tx, "links", "updated_at", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return err
 	}
+	if err := normalizeLinksForeignKey(ctx, tx); err != nil {
+		return err
+	}
 
 	now := time.Now().Unix()
 	if _, err := tx.ExecContext(ctx, `UPDATE links SET position = id WHERE position = 0`); err != nil {
@@ -283,6 +286,84 @@ func seedDefaultCategoriesTx(ctx context.Context, tx *sql.Tx, panelID int64) err
 		}
 	}
 	return nil
+}
+
+func normalizeLinksForeignKey(ctx context.Context, tx *sql.Tx) error {
+	target, err := linksForeignKeyTargetTx(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if target == "" || target == "categories" {
+		return nil
+	}
+
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE links RENAME TO links_legacy`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE TABLE links (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		url TEXT NOT NULL,
+		description TEXT NOT NULL DEFAULT '',
+		logo_url TEXT NOT NULL DEFAULT '',
+		custom_logo_url TEXT NOT NULL DEFAULT '',
+		category_id INTEGER NOT NULL,
+		position INTEGER NOT NULL DEFAULT 0,
+		created_at INTEGER NOT NULL DEFAULT 0,
+		updated_at INTEGER NOT NULL DEFAULT 0,
+		FOREIGN KEY(category_id) REFERENCES categories(id) ON DELETE CASCADE
+	);`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO links(
+		id, name, url, description, logo_url, custom_logo_url, category_id, position, created_at, updated_at
+	)
+	SELECT
+		id,
+		name,
+		url,
+		COALESCE(description, ''),
+		COALESCE(logo_url, ''),
+		COALESCE(custom_logo_url, ''),
+		category_id,
+		CASE WHEN position = 0 THEN id ELSE position END,
+		CASE WHEN created_at = 0 THEN CAST(strftime('%s','now') AS INTEGER) ELSE created_at END,
+		CASE WHEN updated_at = 0 THEN CAST(strftime('%s','now') AS INTEGER) ELSE updated_at END
+	FROM links_legacy`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DROP TABLE links_legacy`); err != nil {
+		return err
+	}
+	return nil
+}
+
+func linksForeignKeyTargetTx(ctx context.Context, tx *sql.Tx) (string, error) {
+	rows, err := tx.QueryContext(ctx, `PRAGMA foreign_key_list(links)`)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			id       int
+			seq      int
+			table    string
+			fromCol  string
+			toCol    string
+			onUpdate string
+			onDelete string
+			match    string
+		)
+		if err := rows.Scan(&id, &seq, &table, &fromCol, &toCol, &onUpdate, &onDelete, &match); err != nil {
+			return "", err
+		}
+		if strings.EqualFold(fromCol, "category_id") {
+			return strings.ToLower(strings.TrimSpace(table)), nil
+		}
+	}
+	return "", rows.Err()
 }
 
 func addColumnIfMissing(ctx context.Context, tx *sql.Tx, table string, column string, definition string) error {
