@@ -11,6 +11,60 @@ import '../styles/global.css';
     <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script is:inline>
+      const LIFE_CHANNEL_KEY = 'life-panels-sync';
+      const LIFE_TAB_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const lifeChannel = 'BroadcastChannel' in window ? new BroadcastChannel('life-panels-channel') : null;
+
+      const activePanelFromDOM = () => {
+        const root = document.querySelector('#dashboard [data-active-panel]');
+        return root?.dataset.activePanel || '';
+      };
+
+      const refreshDashboard = (panelId) => {
+        const targetPanel = panelId || activePanelFromDOM();
+        const url = targetPanel
+          ? `/backend/partials/dashboard?panel_id=${encodeURIComponent(targetPanel)}`
+          : '/backend/partials/dashboard';
+        if (window.htmx) {
+          window.htmx.ajax('GET', url, { target: '#dashboard', swap: 'innerHTML' });
+        }
+      };
+
+      const broadcastMutation = (panelId = '') => {
+        const message = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          source: LIFE_TAB_ID,
+          panelId,
+          ts: Date.now()
+        };
+        if (lifeChannel) lifeChannel.postMessage(message);
+        localStorage.setItem(LIFE_CHANNEL_KEY, JSON.stringify(message));
+      };
+
+      window.notifyPanelMutation = broadcastMutation;
+
+      const handleSyncMessage = (payload) => {
+        if (!payload || payload.source === LIFE_TAB_ID) return;
+        refreshDashboard(payload.panelId || '');
+      };
+
+      if (lifeChannel) {
+        lifeChannel.onmessage = (event) => handleSyncMessage(event.data);
+      }
+      window.addEventListener('storage', (event) => {
+        if (event.key !== LIFE_CHANNEL_KEY || !event.newValue) return;
+        try {
+          handleSyncMessage(JSON.parse(event.newValue));
+        } catch (_) {}
+      });
+
+      document.addEventListener('htmx:afterRequest', (event) => {
+        const path = event.detail?.requestConfig?.path || '';
+        if (!path.includes('/backend/actions/')) return;
+        const panelId = activePanelFromDOM();
+        broadcastMutation(panelId);
+      });
+
       window.setupLifePanelsDnd = (root, panelId) => {
         if (!window.Sortable || !root) return;
 
@@ -20,7 +74,11 @@ import '../styles/global.css';
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body
-          }).catch(() => {});
+          })
+            .then((res) => {
+              if (res.ok) broadcastMutation(panelId);
+            })
+            .catch(() => {});
         };
 
         const categoryContainer = root.querySelector('[data-categories-dnd]');
