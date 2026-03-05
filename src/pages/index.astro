@@ -7,8 +7,153 @@ import '../styles/global.css';
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Personal Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js" defer></script>
     <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script is:inline>
+      const LIFE_CHANNEL_KEY = 'life-panels-sync';
+      const LIFE_TAB_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const lifeChannel = 'BroadcastChannel' in window ? new BroadcastChannel('life-panels-channel') : null;
+
+      const activePanelFromDOM = () => {
+        const root = document.querySelector('#dashboard [data-active-panel]');
+        return root?.dataset.activePanel || '';
+      };
+
+      const refreshDashboard = (panelId) => {
+        const targetPanel = panelId || activePanelFromDOM();
+        const url = targetPanel
+          ? `/backend/partials/dashboard?panel_id=${encodeURIComponent(targetPanel)}`
+          : '/backend/partials/dashboard';
+        if (window.htmx) {
+          window.htmx.ajax('GET', url, { target: '#dashboard', swap: 'innerHTML' });
+        }
+      };
+
+      const broadcastMutation = (panelId = '') => {
+        const message = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          source: LIFE_TAB_ID,
+          panelId,
+          ts: Date.now()
+        };
+        if (lifeChannel) lifeChannel.postMessage(message);
+        localStorage.setItem(LIFE_CHANNEL_KEY, JSON.stringify(message));
+      };
+
+      window.notifyPanelMutation = broadcastMutation;
+
+      const handleSyncMessage = (payload) => {
+        if (!payload || payload.source === LIFE_TAB_ID) return;
+        refreshDashboard(payload.panelId || '');
+      };
+
+      if (lifeChannel) {
+        lifeChannel.onmessage = (event) => handleSyncMessage(event.data);
+      }
+      window.addEventListener('storage', (event) => {
+        if (event.key !== LIFE_CHANNEL_KEY || !event.newValue) return;
+        try {
+          handleSyncMessage(JSON.parse(event.newValue));
+        } catch (_) {}
+      });
+
+      const isTypingTarget = (target) => {
+        if (!target) return false;
+        const tag = target.tagName?.toLowerCase();
+        return tag === 'input' || tag === 'textarea' || target.isContentEditable;
+      };
+
+      window.addEventListener('keydown', (event) => {
+        if (isTypingTarget(event.target)) return;
+
+        if (event.key === '/') {
+          event.preventDefault();
+          document.querySelector('#panel-search')?.focus();
+          return;
+        }
+
+        if (event.key.toLowerCase() === 'n') {
+          event.preventDefault();
+          const addInput = document.querySelector('#add-link-name');
+          addInput?.focus();
+          return;
+        }
+
+        if (/^[1-9]$/.test(event.key)) {
+          const index = Number(event.key) - 1;
+          const tabs = Array.from(document.querySelectorAll('.panel-tab'));
+          if (tabs[index]) {
+            event.preventDefault();
+            tabs[index].click();
+          }
+        }
+      });
+
+      document.addEventListener('htmx:afterRequest', (event) => {
+        const path = event.detail?.requestConfig?.path || '';
+        if (!path.includes('/backend/actions/')) return;
+        const panelId = activePanelFromDOM();
+        broadcastMutation(panelId);
+      });
+
+      window.setupLifePanelsDnd = (root, panelId) => {
+        if (!window.Sortable || !root) return;
+
+        const post = (url, data) => {
+          const body = new URLSearchParams(data);
+          fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body
+          })
+            .then((res) => {
+              if (res.ok) broadcastMutation(panelId);
+            })
+            .catch(() => {});
+        };
+
+        const categoryContainer = root.querySelector('[data-categories-dnd]');
+        if (categoryContainer && !categoryContainer.dataset.sortableReady) {
+          categoryContainer.dataset.sortableReady = '1';
+          new window.Sortable(categoryContainer, {
+            animation: 160,
+            draggable: '.category-column',
+            handle: '.category-column-head',
+            onEnd: () => {
+              const ids = Array.from(categoryContainer.querySelectorAll('.category-column'))
+                .map((item) => item.dataset.categoryId)
+                .filter(Boolean)
+                .join(',');
+              post('/backend/actions/reorder/categories', { panel_id: panelId, ordered_ids: ids });
+            }
+          });
+        }
+
+        const syncAllLists = () => {
+          root.querySelectorAll('[data-links-dnd]').forEach((list) => {
+            const categoryId = list.dataset.categoryId;
+            const ids = Array.from(list.querySelectorAll('.dnd-link'))
+              .map((item) => item.dataset.linkId)
+              .filter(Boolean)
+              .join(',');
+            post('/backend/actions/reorder/links', { category_id: categoryId, ordered_ids: ids });
+          });
+        };
+
+        root.querySelectorAll('[data-links-dnd]').forEach((list) => {
+          if (list.dataset.sortableReady) return;
+          list.dataset.sortableReady = '1';
+          new window.Sortable(list, {
+            animation: 160,
+            group: 'panel-links',
+            draggable: '.dnd-link',
+            handle: '.card-top',
+            onEnd: () => syncAllLists()
+          });
+        });
+      };
+    </script>
   </head>
   <body
     x-data="{
@@ -33,21 +178,27 @@ import '../styles/global.css';
       <header
         class="hero"
         x-data="{
+          greeting: '',
           time: '',
           date: '',
           init() {
             const update = () => {
               const now = new Date();
+              const hour = now.getHours();
+              if (hour >= 5 && hour < 12) this.greeting = 'Good Morning';
+              else if (hour >= 12 && hour < 17) this.greeting = 'Good Afternoon';
+              else if (hour >= 17 && hour < 21) this.greeting = 'Good Evening';
+              else this.greeting = 'Good Night';
               this.time = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
               this.date = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
             };
             update();
-            setInterval(update, 30000);
+            setInterval(update, 60000);
           }
         }"
       >
         <div>
-          <h1>Welcome Back!</h1>
+          <h1 x-text="greeting">Welcome Back!</h1>
           <p>Your Bookmark Hub</p>
         </div>
         <div class="hero-center">

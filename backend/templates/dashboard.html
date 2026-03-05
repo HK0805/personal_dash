@@ -4,21 +4,46 @@
   x-data="{
     selected: 'All',
     query: '',
-    matches(name, url, category) {
+    matches(name, url, description, category) {
       const q = this.query.trim().toLowerCase();
-      const text = (name + ' ' + url).toLowerCase();
+      const text = (name + ' ' + url + ' ' + description).toLowerCase();
       const queryOk = q === '' || text.includes(q);
       const categoryOk = this.selected === 'All' || this.selected === category;
       return queryOk && categoryOk;
     }
   }"
+  x-init="window.setupLifePanelsDnd && window.setupLifePanelsDnd($root, '{{.FormPanelID}}')"
+  data-active-panel="{{.FormPanelID}}"
 >
+  <section class="panel-strip glass-panel">
+    <div class="panel-tabs">
+      {{range .Panels}}
+      <button
+        type="button"
+        class="panel-tab {{if eq .ID $.ActivePanel}}active{{end}}"
+        hx-get="/backend/partials/dashboard?panel_id={{.ID}}"
+        hx-target="#dashboard"
+        hx-swap="innerHTML"
+      >
+        {{.Name}}
+      </button>
+      {{end}}
+    </div>
+    <div class="panel-actions">
+      <form class="panel-form" hx-post="/backend/actions/panels/create" hx-target="#dashboard" hx-swap="innerHTML">
+        <input name="name" placeholder="New panel" required />
+        <button class="btn btn-primary" type="submit">Add Panel</button>
+      </form>
+      {{if gt (len .Panels) 1}}
+      <form hx-post="/backend/actions/panels/{{.ActivePanel}}/delete" hx-target="#dashboard" hx-swap="innerHTML">
+        <button class="btn btn-ghost" type="submit">Delete Active Panel</button>
+      </form>
+      {{end}}
+    </div>
+  </section>
+
   <section class="search-strip glass-panel">
-    <input
-      type="text"
-      placeholder="Search your links..."
-      x-model.debounce.150ms="query"
-    />
+    <input id="panel-search" type="text" placeholder="{{.SearchHint}}" x-model.debounce.150ms="query" />
   </section>
 
   <section class="top-grid">
@@ -44,8 +69,10 @@
       </div>
 
       <form class="link-form" hx-post="/backend/actions/links/create" hx-target="#dashboard" hx-swap="innerHTML">
-        <input name="name" placeholder="Link name" required />
+        <input type="hidden" name="active_panel_id" value="{{.FormPanelID}}" />
+        <input id="add-link-name" name="name" placeholder="Link name" required />
         <input name="url" type="url" placeholder="https://example.com" required />
+        <input name="description" placeholder="Description (optional)" />
         <select name="category_id" required>
           <option value="">Choose category</option>
           {{range .Categories}}
@@ -56,6 +83,7 @@
       </form>
 
       <form class="category-form" hx-post="/backend/actions/categories/create" hx-target="#dashboard" hx-swap="innerHTML">
+        <input type="hidden" name="active_panel_id" value="{{.FormPanelID}}" />
         <input name="name" placeholder="Create category" required />
         <button type="submit" class="btn btn-ghost">Add Category</button>
       </form>
@@ -83,59 +111,103 @@
       </div>
     </div>
 
-    <div class="cards-grid">
+    <div class="category-columns" data-categories-dnd>
       {{range .Categories}}
-      {{range .Links}}
-      {{$link := .}}
-      <article class="bookmark-card" x-show="matches({{printf "%q" $link.Name}}, {{printf "%q" $link.URL}}, {{printf "%q" $link.CategoryName}})">
-        <div x-data="{ editing: false }">
-          <div class="card-read" x-show="!editing">
-            <div class="card-top">
-              <a class="card-name" href="{{.URL}}" target="_blank" rel="noreferrer">{{.Name}}</a>
-              <span class="card-category">{{.CategoryName}}</span>
-            </div>
-            <p class="card-url">{{.URL}}</p>
-            <div class="card-actions">
-              <button class="btn btn-soft" @click="editing = true" type="button">Edit</button>
-              <form hx-post="/backend/actions/links/{{.ID}}/delete" hx-target="#dashboard" hx-swap="innerHTML">
-                <button class="btn btn-danger" type="submit">Delete</button>
+      <article class="category-column" data-category-id="{{.ID}}">
+        <header class="category-column-head">
+          <h3>{{.Name}}</h3>
+        </header>
+        <div class="cards-grid links-dnd" data-links-dnd data-category-id="{{.ID}}">
+          {{range .Links}}
+          {{$link := .}}
+          <article class="bookmark-card dnd-link" data-link-id="{{.ID}}" x-show="matches({{printf "%q" $link.Name}}, {{printf "%q" $link.URL}}, {{printf "%q" $link.Description}}, {{printf "%q" $link.CategoryName}})">
+            <div x-data="{ editing: false }">
+              <div class="card-read" x-show="!editing">
+                <div class="card-top">
+                  <div class="card-main">
+                    {{if .LogoURL}}
+                    <img src="{{.LogoURL}}" alt="" class="card-logo" loading="lazy" />
+                    {{end}}
+                    <a class="card-name" href="{{.URL}}" target="_blank" rel="noreferrer">{{.Name}}</a>
+                  </div>
+                  <span class="card-category">{{.CategoryName}}</span>
+                </div>
+                <p class="card-url">{{.URL}}</p>
+                {{if .Description}}
+                <p class="card-description">{{.Description}}</p>
+                {{end}}
+                <div class="card-actions">
+                  <button class="btn btn-soft" @click="editing = true" type="button">Edit</button>
+                  <form hx-post="/backend/actions/links/{{.ID}}/delete" hx-target="#dashboard" hx-swap="innerHTML">
+                    <input type="hidden" name="active_panel_id" value="{{$.FormPanelID}}" />
+                    <button class="btn btn-danger" type="submit">Delete</button>
+                  </form>
+                </div>
+              </div>
+
+              <form
+                class="card-edit"
+                x-show="editing"
+                x-cloak
+                hx-post="/backend/actions/links/{{.ID}}/update"
+                hx-target="#dashboard"
+                hx-swap="innerHTML"
+              >
+                <input type="hidden" name="active_panel_id" value="{{$.FormPanelID}}" />
+                <input name="name" value="{{.Name}}" required />
+                <input name="url" type="url" value="{{.URL}}" required />
+                <input name="description" value="{{.Description}}" placeholder="Description" />
+                <input name="custom_logo_url" value="{{.LogoURL}}" placeholder="Custom logo URL" />
+                <select name="category_id" required>
+                  {{range $.Categories}}
+                  <option value="{{.ID}}" {{if eq .ID $link.CategoryID}}selected{{end}}>{{.Name}}</option>
+                  {{end}}
+                </select>
+                <div class="card-actions">
+                  <button class="btn btn-primary" type="submit">Save</button>
+                  <button class="btn btn-ghost" @click="editing = false" type="button">Cancel</button>
+                </div>
               </form>
             </div>
-          </div>
-
-          <form
-            class="card-edit"
-            x-show="editing"
-            x-cloak
-            hx-post="/backend/actions/links/{{.ID}}/update"
-            hx-target="#dashboard"
-            hx-swap="innerHTML"
-          >
-            <input name="name" value="{{.Name}}" required />
-            <input name="url" type="url" value="{{.URL}}" required />
-            <select name="category_id" required>
-              {{range $.Categories}}
-              <option value="{{.ID}}" {{if eq .ID $link.CategoryID}}selected{{end}}>{{.Name}}</option>
-              {{end}}
-            </select>
-            <div class="card-actions">
-              <button class="btn btn-primary" type="submit">Save</button>
-              <button class="btn btn-ghost" @click="editing = false" type="button">Cancel</button>
-            </div>
-          </form>
+          </article>
+          {{end}}
         </div>
       </article>
-      {{end}}
       {{end}}
     </div>
 
     <section class="category-delete-row">
       {{range .Categories}}
       <form hx-post="/backend/actions/categories/{{.ID}}/delete" hx-target="#dashboard" hx-swap="innerHTML">
+        <input type="hidden" name="active_panel_id" value="{{$.FormPanelID}}" />
         <button type="submit" class="btn btn-ghost">Delete {{.Name}}</button>
       </form>
       {{end}}
     </section>
+  </section>
+
+  <section class="glass-panel notes-panel">
+    <div class="panel-head">
+      <h2>Scratchpad</h2>
+    </div>
+    <form
+      hx-post="/backend/actions/panels/{{.FormPanelID}}/notes"
+      hx-trigger="keyup changed delay:600ms from:textarea"
+      hx-swap="none"
+    >
+      <textarea
+        name="notes"
+        placeholder="Quick notes for this panel..."
+      >{{.PanelNotes}}</textarea>
+    </form>
+    <form
+      hx-post="/backend/actions/panels/{{.FormPanelID}}/notes-clear"
+      hx-target="#dashboard"
+      hx-swap="innerHTML"
+      hx-confirm="Clear notes for this panel?"
+    >
+      <button type="submit" class="btn btn-ghost">Clear Notes</button>
+    </form>
   </section>
 </section>
 {{end}}
