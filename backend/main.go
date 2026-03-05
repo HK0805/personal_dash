@@ -483,6 +483,8 @@ func (s *server) handlePanelActions(w http.ResponseWriter, r *http.Request) {
 		s.handleDeletePanel(w, r, panelID)
 	case "notes":
 		s.handleUpdatePanelNotes(w, r, panelID)
+	case "notes-clear":
+		s.handleClearPanelNotes(w, r, panelID)
 	default:
 		http.NotFound(w, r)
 	}
@@ -561,6 +563,16 @@ func (s *server) handleUpdatePanelNotes(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *server) handleClearPanelNotes(w http.ResponseWriter, r *http.Request, panelID int64) {
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+	defer cancel()
+	if _, err := s.db.ExecContext(ctx, `UPDATE panels SET notes = '' WHERE id = ?`, panelID); err != nil {
+		http.Error(w, "failed to clear notes", http.StatusInternalServerError)
+		return
+	}
+	s.renderDashboard(w, panelID)
 }
 
 func (s *server) handleCreateCategory(w http.ResponseWriter, r *http.Request) {

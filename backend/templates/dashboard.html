@@ -201,11 +201,11 @@
       >{{.PanelNotes}}</textarea>
     </form>
     <form
-      hx-post="/backend/actions/panels/{{.FormPanelID}}/notes"
-      hx-swap="none"
+      hx-post="/backend/actions/panels/{{.FormPanelID}}/notes-clear"
+      hx-target="#dashboard"
+      hx-swap="innerHTML"
       hx-confirm="Clear notes for this panel?"
     >
-      <input type="hidden" name="notes" value="" />
       <button type="submit" class="btn btn-ghost">Clear Notes</button>
     </form>
   </section>
